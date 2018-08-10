@@ -46,51 +46,105 @@ typedef struct bit_file
 }
 COMPRESSED_FILE;
 
-struct Message {
+class Message {
+private:
     short int ultrasonic_distance_sensor[5]; //пять ультразвуковых датчиков расстояния
     short int infrared_distance_sensor[4]; //четыре инфракрасных датчика расстояния
     float accelerometer[3]; //три оси акселерометра
     short int gyroscope[4][3]; //четыре гироскопа
+public:
+    Message(){
+        // Значения измерений от 15 до 645 см
+        ultrasonic_distance_sensor[0] = 15 + rand()%630; 
+        ultrasonic_distance_sensor[1] = 15 + rand()%630; 
+        ultrasonic_distance_sensor[2] = 15 + rand()%630; 
+        ultrasonic_distance_sensor[3] = 15 + rand()%630; 
+        ultrasonic_distance_sensor[4] = 15 + rand()%630; 
+        
+        // значения от 10 до 80 см
+        infrared_distance_sensor[0] = 10 + rand()%70; 
+        infrared_distance_sensor[1] = 10 + rand()%70; 
+        infrared_distance_sensor[2] = 10 + rand()%70; 
+        infrared_distance_sensor[3] = 10 + rand()%70; 
+        
+        // значения от -11g до 11g
+        accelerometer[0] = -11 + rand()%22; 
+        accelerometer[1] = -11 + rand()%22; 
+        accelerometer[2] = -11 + rand()%22; 
+        
+        // значения от -2000 до 2000 °/сек
+        gyroscope[0][0] = -2000 + rand()%4000; 
+        gyroscope[0][1] = -2000 + rand()%4000; 
+        gyroscope[0][2] = -2000 + rand()%4000; 
+        gyroscope[1][0] = -2000 + rand()%4000; 
+        gyroscope[1][1] = -2000 + rand()%4000; 
+        gyroscope[1][2] = -2000 + rand()%4000; 
+        gyroscope[2][0] = -2000 + rand()%4000; 
+        gyroscope[2][1] = -2000 + rand()%4000; 
+        gyroscope[2][2] = -2000 + rand()%4000; 
+        gyroscope[3][0] = -2000 + rand()%4000; 
+        gyroscope[3][1] = -2000 + rand()%4000; 
+        gyroscope[3][2] = -2000 + rand()%4000; 
+    }
+    
+    void setZero(){
+        ultrasonic_distance_sensor[0] = ultrasonic_distance_sensor[1] = 
+        ultrasonic_distance_sensor[2] = ultrasonic_distance_sensor[3] = 
+        ultrasonic_distance_sensor[4] =         
+        infrared_distance_sensor[0] = infrared_distance_sensor[1] = 
+        infrared_distance_sensor[2] = infrared_distance_sensor[3] = 
+        accelerometer[0] = accelerometer[1] = accelerometer[2] = 
+        gyroscope[0][0] = gyroscope[0][1] = gyroscope[0][2] = 
+        gyroscope[1][0] = gyroscope[1][1] = gyroscope[1][2] = 
+        gyroscope[2][0] = gyroscope[2][1] = gyroscope[2][2] = 
+        gyroscope[3][0] = gyroscope[3][1] = gyroscope[3][2] = 0;
+    }
+    
+    void setSimularMeasurement(){
+        //Ультразвуковые датчики расстояния
+        ultrasonic_distance_sensor[0] = ultrasonic_distance_sensor[1] = 
+        ultrasonic_distance_sensor[2] = ultrasonic_distance_sensor[3] = 
+        ultrasonic_distance_sensor[4] = 
+                15 + rand()%630;        
+                
+        //Инфракрасные датчики расстояния        
+        infrared_distance_sensor[0] = infrared_distance_sensor[1] = 
+        infrared_distance_sensor[2] = infrared_distance_sensor[3] = 
+                10 + rand()%70;
+                
+        //Акселерометр
+        accelerometer[0] = accelerometer[1] = accelerometer[2] = 
+                -11 + rand()%22;
+                
+        //Гироскопы
+        gyroscope[0][0] = gyroscope[0][1] = gyroscope[0][2] = 
+        gyroscope[1][0] = gyroscope[1][1] = gyroscope[1][2] = 
+        gyroscope[2][0] = gyroscope[2][1] = gyroscope[2][2] = 
+        gyroscope[3][0] = gyroscope[3][1] = gyroscope[3][2] = 
+               -2000 + rand()%4000; 
+        
+    }
 };
 
 void createMessage(unsigned int count_measurement) {
-    Message m1;
     const char *FName="data.dat"; 
     ofstream fout(FName, ios::binary | ios::out);
     if (count_measurement == 0) count_measurement = 1;
 
     for (int i=0; i<count_measurement; i++){
-        // Значения измерений от 15 до 645 см
-        m1.ultrasonic_distance_sensor[0] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[1] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[2] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[3] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[4] = 15 + rand()%630; 
+        // показания измерений
+        Message m1;
         
-        // значения от 10 до 80 см
-        m1.infrared_distance_sensor[0] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[1] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[2] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[3] = 10 + rand()%70; 
+        /* Обнуление показаний.
+         * Необходимо для проведения эксперимента зависимости нагрузки CPU при 
+         * показаниях мзиерений равных 0.
+         * m1.setZero();
+         */
         
-        // значения от -11g до 11g
-        m1.accelerometer[0] = -11 + rand()%22; 
-        m1.accelerometer[1] = -11 + rand()%22; 
-        m1.accelerometer[2] = -11 + rand()%22; 
-        
-        // значения от -2000 до 2000 °/сек
-        m1.gyroscope[0][0] = -2000 + rand()%4000; 
-        m1.gyroscope[0][1] = -2000 + rand()%4000; 
-        m1.gyroscope[0][2] = -2000 + rand()%4000; 
-        m1.gyroscope[1][0] = -2000 + rand()%4000; 
-        m1.gyroscope[1][1] = -2000 + rand()%4000; 
-        m1.gyroscope[1][2] = -2000 + rand()%4000; 
-        m1.gyroscope[2][0] = -2000 + rand()%4000; 
-        m1.gyroscope[2][1] = -2000 + rand()%4000; 
-        m1.gyroscope[2][2] = -2000 + rand()%4000; 
-        m1.gyroscope[3][0] = -2000 + rand()%4000; 
-        m1.gyroscope[3][1] = -2000 + rand()%4000; 
-        m1.gyroscope[3][2] = -2000 + rand()%4000; 
+        /* Установка одинаковых показаний.
+         * Необходимо для проведения эксперимента зависимости нагрузки CPU.
+         * m1.setSimularMeasurement();
+         */
         
         fout.write((char*)&m1, sizeof(m1));
     }
