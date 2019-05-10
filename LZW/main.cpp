@@ -1,9 +1,7 @@
 /* 
- * File:   main.cpp
- * Author: Mironov
- *
- * Created on 7 апреля 2018 г., 17:39
- */
+ * Данная программа создана для оценки нагрузки на процессор в зависимости от
+ * входящих данных при работе алгоритма S-LZW
+*/
 
 #include <cstdlib>
 #include <fstream>
@@ -18,26 +16,6 @@
 typedef unsigned char uchar;
 typedef unsigned long ulong;
 typedef unsigned int  uint;
-
-static inline uint64_t
-rdtsc(void)
-{
-	uint32_t eax = 0, edx;
-
-	__asm__ __volatile__("cpuid;"
-			     "rdtsc;"
-				: "+a" (eax), "=d" (edx)
-				:
-				: "%rcx", "%rbx", "memory");
-
-	__asm__ __volatile__("xorl %%eax, %%eax;"
-			     "cpuid;"
-				:
-				:
-				: "%rax", "%rbx", "%rcx", "%rdx", "memory");
-
-	return (((uint64_t)edx << 32) | eax);
-}
 
 using namespace std;
 
@@ -529,16 +507,6 @@ ifstream::pos_type filesize(const char* filename)
     return in.tellg(); 
 }
 
-/*
- * обращение к ассемблер команде для получения тактов процессора
-inline unsigned int HightTime(){
-    asm("rdtsc");
-}
-*/
-
-unsigned int pft_start;
-unsigned int pft_finish;
-
 
 int main(int argc, char** argv) {
 
@@ -548,28 +516,12 @@ int main(int argc, char** argv) {
     
     do{
         for (int i=0; i<100; i++){
-            createMessage(count_measurement);
-            // Компрессия:
-
-				// 	в микросекундах оценка ресурсов процессора
-				clock_t start_mcs = clock();
-				// оценка загрузки процессора в тактах
-				unsigned long start_ticks = rdtsc();
-
-				setbuf( stdout, NULL );
-                call_compress("data.dat", "out.dat");
-
-				// такты
-				unsigned long diff_ticks = rdtsc() - start_ticks;
-				// микросекунды
-				clock_t diff_mcs = clock() - start_mcs;
-				
-            a[i] = diff_ticks;
-            
-            //a[i] = filesize("out.dat"); // размер файла после сжатия
-            cout << count_measurement << " - " << i << endl;
-            // Декомпрессия:
-            //call_expand("out1.txt", "out_data.txt");
+          createMessage(count_measurement);
+             
+          // Компрессия:
+				  setbuf( stdout, NULL );
+          call_compress("data.dat", "out.dat");
+          cout << count_measurement << " - " << i << endl;
         }
         float medium =0;
         for (int i=0; i<100; i++){
@@ -579,10 +531,7 @@ int main(int argc, char** argv) {
         
         //средний размер файла после сжатия (после 100 итереаций)
         //fRes << count_measurement << "\t" << filesize("data.dat") << "\t"
-          //      << medium << endl;
-        
-        //среднее количество тактов
-        fRes << count_measurement << "\t" << fixed << medium << endl;
+        //      << medium << endl;
         
         count_measurement += 30;
     } while (count_measurement < 600);
