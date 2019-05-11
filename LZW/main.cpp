@@ -57,6 +57,20 @@ void ExpandFile   ( BFILE *input, FILE *output );
 uint find_dictionary_match ( int prefix_code, int character );
 uint decode_string ( uint offset, uint code );
 
+/*--------------------------------------------------------
+ * Константы для оценки загрузки CPU
+*/
+ulong amountTacts = 0;
+#define OPEN_INPUT_BFILE_TACTS          1
+#define OPEN_OUTPUT_BFILE_TACTS         1
+#define WRITE_BIT_TACTS                 1
+#define WRITE_BITS_TACTS                1
+#define READ_BIT_TACTS                  1
+#define READ_BITS_TACTS                 1
+#define CLOSE_INPUT_BFILE_TACTS         1
+#define CLOSE_OUTPUT_BFILE_TACTS        1
+#define FIND_DICTIONARY_MATCH_TACTS     1
+
 /*---------------------------------------------------------
    Константы, используемые при работе LZW
 */
@@ -90,6 +104,8 @@ void fatal_error( const char *str, ... )
 
 BFILE *OpenOutputBFile ( const char * name )
 {
+  amountTacts += OPEN_OUTPUT_BFILE_TACTS; 
+
    BFILE *bfile;
 
    bfile = (BFILE *) calloc( 1, sizeof( BFILE ) );
@@ -106,6 +122,7 @@ BFILE *OpenOutputBFile ( const char * name )
 
 BFILE *OpenInputBFile( const char *name )
 {
+  amountTacts += OPEN_INPUT_BFILE_TACTS;
    BFILE *bfile;
 
    bfile = (BFILE *) calloc( 1, sizeof( BFILE ) );
@@ -122,6 +139,8 @@ BFILE *OpenInputBFile( const char *name )
 
 void CloseOutputBFile ( BFILE *bfile )
 {
+  amountTacts += CLOSE_OUTPUT_BFILE_TACTS;
+
    if ( bfile->mask != 0x80 )
       putc( bfile->rack, bfile->file );
    fclose ( bfile->file );
@@ -134,6 +153,7 @@ void CloseOutputBFile ( BFILE *bfile )
 
 void CloseInputBFile ( BFILE *bfile )
 {
+  amountTacts += CLOSE_INPUT_BFILE_TACTS;
     fclose ( bfile->file );
     free ( (char *) bfile );
 }
@@ -144,14 +164,13 @@ void CloseInputBFile ( BFILE *bfile )
 
 void WriteBit ( BFILE *bfile, int bit )
 {
+  amountTacts += WRITE_BIT_TACTS;
    if ( bit )
       bfile->rack |= bfile->mask;
    bfile->mask >>= 1;
    if ( bfile->mask == 0 )
    {
       putc( bfile->rack, bfile->file );
-      /*if ( ( bfile->pacifier_counter++ & PACIFIER_COUNT ) == 0 )
-         putc( '.', stdout );*/
       bfile->rack = 0;
       bfile->mask = 0x80;
    }
@@ -163,6 +182,7 @@ void WriteBit ( BFILE *bfile, int bit )
 
 void WriteBits( BFILE *bfile, ulong code, int count )
 {
+  amountTacts += WRITE_BITS_TACTS;
    ulong mask;
 
    mask = 1L << ( count - 1 );
@@ -174,8 +194,6 @@ void WriteBits( BFILE *bfile, ulong code, int count )
       if ( bfile->mask == 0 )
       {
   putc( bfile->rack, bfile->file );
-  /*if ( ( bfile->pacifier_counter++ & PACIFIER_COUNT ) == 0 )
-            putc( '.', stdout );*/
   bfile->rack = 0;
   bfile->mask = 0x80;
       }
@@ -189,6 +207,7 @@ void WriteBits( BFILE *bfile, ulong code, int count )
 
 int ReadBit( BFILE *bfile )
 {
+  amountTacts += READ_BIT_TACTS;
    int value;
 
    if ( bfile->mask == 0x80 )
@@ -196,8 +215,6 @@ int ReadBit( BFILE *bfile )
       bfile->rack = getc( bfile->file );
       if ( bfile->rack == EOF )
          fatal_error( "Error in function ReadBit!\n" );
-      /*if ( ( bfile->pacifier_counter++ & PACIFIER_COUNT ) == 0 )
-         putc( '.', stdout );*/
    }
 
    value = bfile->rack & bfile->mask;
@@ -213,6 +230,7 @@ int ReadBit( BFILE *bfile )
 
 ulong ReadBits ( BFILE *bfile, int bit_count )
 {
+  amountTacts += READ_BITS_TACTS;
    ulong mask;
    ulong return_value;
 
@@ -225,8 +243,6 @@ ulong ReadBits ( BFILE *bfile, int bit_count )
   bfile->rack = getc( bfile->file );
   if ( bfile->rack == EOF )
             fatal_error( "Error in function ReadBits!\n" );
-  /*if ( ( bfile->pacifier_counter++ & PACIFIER_COUNT ) == 0 )
-            putc( '.', stdout );*/
       }
       if ( bfile->rack & bfile->mask )
          return_value |= mask;
@@ -354,6 +370,7 @@ void ExpandFile ( BFILE *input, FILE *output )
 
 uint find_dictionary_match ( int prefix_code, int character )
 {
+  amountTacts += FIND_DICTIONARY_MATCH_TACTS;
    int index;
    int offset;
 
@@ -398,7 +415,7 @@ uint decode_string ( uint count, uint code )
 }
 
 
-void call_compress( const char* infile_name, const char* outfile_name ) {
+ulong call_compress( const char* infile_name, const char* outfile_name ) {
 
   BFILE *output;
   FILE *input;
@@ -412,16 +429,15 @@ void call_compress( const char* infile_name, const char* outfile_name ) {
   output = OpenOutputBFile( outfile_name );
   if ( output == NULL )
    fatal_error( "Ошибка при открытии %s для вывода\n", outfile_name );
-  //printf( "\nКомпрессия %s в %s\n", infile_name, outfile_name );
   
   // вызов процедуры компрессии
   CompressFile( input, output );
-
   // закрытие файлов
   CloseOutputBFile( output );
   fclose( input );
 
-  //printf( "\nCompression complete." );
+  // Вывод итогового значения тактов
+  return amountTacts;  
 }
 
 void call_expand( const char* infile_name, const char* outfile_name ) {
@@ -438,8 +454,6 @@ void call_expand( const char* infile_name, const char* outfile_name ) {
   if ( output == NULL )
    fatal_error( "Error on open %s for write\n", outfile_name );
 
-  //printf( "\nDecompression %s into %s\n", infile_name, outfile_name );
-  
   // вызов процедуры декомпрессии
   ExpandFile(input, output );
 
@@ -447,7 +461,6 @@ void call_expand( const char* infile_name, const char* outfile_name ) {
   CloseInputBFile( input );
   fclose( output );
 
-  //printf( "\nDecompression complete." );
 }
 
 struct Message {
@@ -507,34 +520,34 @@ ifstream::pos_type filesize(const char* filename)
     return in.tellg(); 
 }
 
-
 int main(int argc, char** argv) {
 
     ofstream fRes("data.xls", ios::out);
-    unsigned int count_measurement = 0;
+    unsigned int count_measurement = 30;
     unsigned long a[100];
     
-    do{
-        for (int i=0; i<100; i++){
+    //do{
+        //for (int i=0; i<100; i++){
           createMessage(count_measurement);
              
           // Компрессия:
 				  setbuf( stdout, NULL );
-          call_compress("data.dat", "out.dat");
-          cout << count_measurement << " - " << i << endl;
-        }
-        float medium =0;
+          a[0] = call_compress("data.dat", "out.dat");
+          cout << a[0] << endl;
+         // cout << count_measurement << " - " << i << endl;
+       // }
+       /* float medium =0;
         for (int i=0; i<100; i++){
             medium += a[i];
         }
-        medium = medium / 100;
+        medium = medium / 100;*/
         
         //средний размер файла после сжатия (после 100 итереаций)
         //fRes << count_measurement << "\t" << filesize("data.dat") << "\t"
         //      << medium << endl;
         
-        count_measurement += 30;
-    } while (count_measurement < 600);
+       // count_measurement += 30;
+   // } while (count_measurement < 600);
     
     fRes.close();
     return 0;
