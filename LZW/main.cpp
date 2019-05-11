@@ -23,6 +23,25 @@ using namespace std;
    Побитовый доступ к файлам
 */
 
+static inline uint64_t
+rdtsc(void)
+{
+  uint32_t eax = 0, edx;
+  __asm__ __volatile__("cpuid;"
+                       "rdtsc;"
+                       : "+a" (eax), "=d" (edx)
+                       :
+                       : "%rcx", "%rbx", "memory");
+
+  __asm__ __volatile__("xorl %%eax, %%eax;"
+                       "cpuid;"
+                       :
+                       :
+                       : "%rax", "%rbx", "%rcx", "%rdx", "memory");
+
+  return (((uint64_t)edx << 32) | eax);
+}
+
 typedef struct bfile
 {
     FILE *file;
@@ -61,15 +80,15 @@ uint decode_string ( uint offset, uint code );
  * Константы для оценки загрузки CPU
 */
 ulong amountTacts = 0;
-#define OPEN_INPUT_BFILE_TACTS          1
-#define OPEN_OUTPUT_BFILE_TACTS         1
-#define WRITE_BIT_TACTS                 1
-#define WRITE_BITS_TACTS                1
-#define READ_BIT_TACTS                  1
-#define READ_BITS_TACTS                 1
-#define CLOSE_INPUT_BFILE_TACTS         1
-#define CLOSE_OUTPUT_BFILE_TACTS        1
-#define FIND_DICTIONARY_MATCH_TACTS     1
+#define OPEN_INPUT_BFILE_MCS          87
+#define OPEN_OUTPUT_BFILE_MCS         1
+#define WRITE_BIT_MCS                 1
+#define WRITE_BITS_MCS                1
+#define READ_BIT_MCS                  1
+#define READ_BITS_MCS                 1
+#define CLOSE_INPUT_BFILE_MCS         1
+#define CLOSE_OUTPUT_BFILE_MCS        1
+#define FIND_DICTIONARY_MATCH_MCS     1
 
 /*---------------------------------------------------------
    Константы, используемые при работе LZW
@@ -106,6 +125,8 @@ BFILE *OpenOutputBFile ( const char * name )
 {
   amountTacts += OPEN_OUTPUT_BFILE_TACTS; 
 
+//  ulong start_ticks = rdtsc();
+  clock_t start_mcs = clock();
    BFILE *bfile;
 
    bfile = (BFILE *) calloc( 1, sizeof( BFILE ) );
@@ -113,6 +134,8 @@ BFILE *OpenOutputBFile ( const char * name )
    bfile->rack = 0;
    bfile->mask = 0x80;
    bfile->pacifier_counter = 0;
+  clock_t diff_mcs = clock() - start_mcs;
+  cout << diff_mcs << endl;
    return bfile;
 }
 
@@ -269,10 +292,6 @@ struct dictionary
 }
 dict[TABLE_SIZE];
 
-/* Стек для декодирования */
-
-char decode_stack[TABLE_SIZE];
-
 /*-----------------------------------------------------------
    Процедура сжатия файла
 */
@@ -318,51 +337,6 @@ void CompressFile ( FILE *input, BFILE *output )
 }
 
 /*-----------------------------------------------------------
-   Процедура декодирования сжатого файла
-*/
-
-void ExpandFile ( BFILE *input, FILE *output )
-{
-   uint next_code, new_code, old_code;
-   int character;
-   uint count;
-
-   next_code = FIRST_CODE;
-   old_code = (uint) ReadBits( input, BITS );
-   if ( old_code == END_OF_STREAM )
-      return;
-   character = old_code;
-
-   putc ( old_code, output );
-
-   while ( ( new_code = (uint) ReadBits( input, BITS ) )
-             != END_OF_STREAM )
-   {
-      /* Обработка возможной исключительной ситуации */
-      if ( new_code >= next_code )
-      {
-         decode_stack[ 0 ] = (char) character;
-         count = decode_string( 1, old_code );
-      }
-      else
-         count = decode_string( 0, new_code );
-
-      character = decode_stack[ count - 1 ];
-      /* Выдача раскодированной строки */
-      while ( count > 0 )
-         putc( decode_stack[--count], output );
-      /* Обновление словаря */
-      if ( next_code <= MAX_CODE )
-      {
-         dict[next_code].prefix_code = old_code;
-         dict[next_code].character = (char) character;
-         next_code++;
-      }
-      old_code = new_code;
-   }
-}
-
-/*-----------------------------------------------------------
    Процедура поиска в словаре указанной пары <код фразы,
    символ>. Для ускорения поиска используется хеш, получаемый
    из параметров.
@@ -398,23 +372,6 @@ uint find_dictionary_match ( int prefix_code, int character )
    }
 }
 
-/*-----------------------------------------------------------
-   Процедура декодирования строки. Размещает символы в стеке,
-   возвращает их количество.
-*/
-
-uint decode_string ( uint count, uint code )
-{
-   while ( code > 255 ) /* Пока не встретится код символа */
-   {
-      decode_stack[count++] = dict[code].character;
-      code = dict[code].prefix_code;
-   }
-   decode_stack[count++] = (char) code;
-   return count;
-}
-
-
 ulong call_compress( const char* infile_name, const char* outfile_name ) {
 
   BFILE *output;
@@ -438,29 +395,6 @@ ulong call_compress( const char* infile_name, const char* outfile_name ) {
 
   // Вывод итогового значения тактов
   return amountTacts;  
-}
-
-void call_expand( const char* infile_name, const char* outfile_name ) {
-  BFILE *input;
-  FILE *output;
-
-  // открытие входного файла для чтения
-  input = OpenInputBFile( infile_name );
-  if ( input == NULL )
-   fatal_error( "Error on open %s for read\n", infile_name );
-  
-  // открытие выходного файла для записи
-  output = fopen( outfile_name, "wb" );
-  if ( output == NULL )
-   fatal_error( "Error on open %s for write\n", outfile_name );
-
-  // вызов процедуры декомпрессии
-  ExpandFile(input, output );
-
-  // закрытие файлов
-  CloseInputBFile( input );
-  fclose( output );
-
 }
 
 struct Message {
@@ -527,15 +461,14 @@ int main(int argc, char** argv) {
     unsigned long a[100];
     
     //do{
-        //for (int i=0; i<100; i++){
-          createMessage(count_measurement);
+        for (int i=0; i<10000; i++){
+         // createMessage(count_measurement);
              
           // Компрессия:
 				  setbuf( stdout, NULL );
           a[0] = call_compress("data.dat", "out.dat");
-          cout << a[0] << endl;
          // cout << count_measurement << " - " << i << endl;
-       // }
+        }
        /* float medium =0;
         for (int i=0; i<100; i++){
             medium += a[i];
