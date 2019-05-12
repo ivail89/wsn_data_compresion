@@ -23,25 +23,6 @@ using namespace std;
    Побитовый доступ к файлам
 */
 
-static inline uint64_t
-rdtsc(void)
-{
-  uint32_t eax = 0, edx;
-  __asm__ __volatile__("cpuid;"
-                       "rdtsc;"
-                       : "+a" (eax), "=d" (edx)
-                       :
-                       : "%rcx", "%rbx", "memory");
-
-  __asm__ __volatile__("xorl %%eax, %%eax;"
-                       "cpuid;"
-                       :
-                       :
-                       : "%rax", "%rbx", "%rcx", "%rdx", "memory");
-
-  return (((uint64_t)edx << 32) | eax);
-}
-
 typedef struct bfile
 {
     FILE *file;
@@ -53,13 +34,8 @@ BFILE;
 
 #define PACIFIER_COUNT 2047
 
-BFILE *OpenInputBFile ( const char *name );
 BFILE *OpenOutputBFile ( const char *name );
-void  WriteBit  ( BFILE *bfile, int bit );
 void  WriteBits ( BFILE *bfile, ulong code, int count );
-int   ReadBit  ( BFILE *bfile );
-ulong ReadBits ( BFILE *bfile, int bit_count );
-void  CloseInputBFile ( BFILE *bfile );
 void  CloseOutputBFile ( BFILE *bfile );
 
 /*---------------------------------------------------------
@@ -67,28 +43,21 @@ void  CloseOutputBFile ( BFILE *bfile );
 */
 
 void CompressFile ( FILE *input, BFILE *output );
-void ExpandFile   ( BFILE *input, FILE *output );
 
 /*---------------------------------------------------------
    Функции работы с моделью данных для алгоритма LZW
 */
 
 uint find_dictionary_match ( int prefix_code, int character );
-uint decode_string ( uint offset, uint code );
 
 /*--------------------------------------------------------
  * Константы для оценки загрузки CPU
 */
-ulong amountTacts = 0;
-#define OPEN_INPUT_BFILE_MCS          87
-#define OPEN_OUTPUT_BFILE_MCS         1
-#define WRITE_BIT_MCS                 1
-#define WRITE_BITS_MCS                1
-#define READ_BIT_MCS                  1
-#define READ_BITS_MCS                 1
-#define CLOSE_INPUT_BFILE_MCS         1
-#define CLOSE_OUTPUT_BFILE_MCS        1
-#define FIND_DICTIONARY_MATCH_MCS     1
+float amountMcs = 0;
+#define OPEN_OUTPUT_BFILE_MCS         87
+#define WRITE_BITS_NS                 721
+#define CLOSE_OUTPUT_BFILE_MCS        92
+#define FIND_DICTIONARY_MATCH_NS      601
 
 /*---------------------------------------------------------
    Константы, используемые при работе LZW
@@ -123,33 +92,12 @@ void fatal_error( const char *str, ... )
 
 BFILE *OpenOutputBFile ( const char * name )
 {
-  amountTacts += OPEN_OUTPUT_BFILE_TACTS; 
+  amountMcs += OPEN_OUTPUT_BFILE_MCS; 
 
-//  ulong start_ticks = rdtsc();
-  clock_t start_mcs = clock();
    BFILE *bfile;
 
    bfile = (BFILE *) calloc( 1, sizeof( BFILE ) );
    bfile->file = fopen( name, "wb" );
-   bfile->rack = 0;
-   bfile->mask = 0x80;
-   bfile->pacifier_counter = 0;
-  clock_t diff_mcs = clock() - start_mcs;
-  cout << diff_mcs << endl;
-   return bfile;
-}
-
-/*-----------------------------------------------------------
-   Открытие файла для побитового чтения
-*/
-
-BFILE *OpenInputBFile( const char *name )
-{
-  amountTacts += OPEN_INPUT_BFILE_TACTS;
-   BFILE *bfile;
-
-   bfile = (BFILE *) calloc( 1, sizeof( BFILE ) );
-   bfile->file = fopen( name, "rb" );
    bfile->rack = 0;
    bfile->mask = 0x80;
    bfile->pacifier_counter = 0;
@@ -162,7 +110,7 @@ BFILE *OpenInputBFile( const char *name )
 
 void CloseOutputBFile ( BFILE *bfile )
 {
-  amountTacts += CLOSE_OUTPUT_BFILE_TACTS;
+  amountMcs += CLOSE_OUTPUT_BFILE_MCS;
 
    if ( bfile->mask != 0x80 )
       putc( bfile->rack, bfile->file );
@@ -171,44 +119,17 @@ void CloseOutputBFile ( BFILE *bfile )
 }
 
 /*-----------------------------------------------------------
-   Закрытие файла для побитового чтения
-*/
-
-void CloseInputBFile ( BFILE *bfile )
-{
-  amountTacts += CLOSE_INPUT_BFILE_TACTS;
-    fclose ( bfile->file );
-    free ( (char *) bfile );
-}
-
-/*-----------------------------------------------------------
-   Вывод одного бита
-*/
-
-void WriteBit ( BFILE *bfile, int bit )
-{
-  amountTacts += WRITE_BIT_TACTS;
-   if ( bit )
-      bfile->rack |= bfile->mask;
-   bfile->mask >>= 1;
-   if ( bfile->mask == 0 )
-   {
-      putc( bfile->rack, bfile->file );
-      bfile->rack = 0;
-      bfile->mask = 0x80;
-   }
-}
-
-/*-----------------------------------------------------------
    Вывод нескольких битов
 */
 
 void WriteBits( BFILE *bfile, ulong code, int count )
 {
-  amountTacts += WRITE_BITS_TACTS;
+  amountMcs += 0.001 * WRITE_BITS_NS;
+
    ulong mask;
 
    mask = 1L << ( count - 1 );
+   ulong mask1 = 1L << ( count - 1 );
    while ( mask != 0)
    {
       if ( mask & code )
@@ -225,63 +146,8 @@ void WriteBits( BFILE *bfile, ulong code, int count )
 }
 
 /*-----------------------------------------------------------
-   Ввод одного бита
-*/
-
-int ReadBit( BFILE *bfile )
-{
-  amountTacts += READ_BIT_TACTS;
-   int value;
-
-   if ( bfile->mask == 0x80 )
-   {
-      bfile->rack = getc( bfile->file );
-      if ( bfile->rack == EOF )
-         fatal_error( "Error in function ReadBit!\n" );
-   }
-
-   value = bfile->rack & bfile->mask;
-   bfile->mask >>= 1;
-   if ( bfile->mask == 0 )
-      bfile->mask = 0x80;
-   return ( value ? 1 : 0 );
-}
-
-/*-----------------------------------------------------------
-   Ввод нескольких битов
-*/
-
-ulong ReadBits ( BFILE *bfile, int bit_count )
-{
-  amountTacts += READ_BITS_TACTS;
-   ulong mask;
-   ulong return_value;
-
-   mask = 1L << ( bit_count - 1 );
-   return_value = 0;
-   while ( mask != 0 )
-   {
-      if ( bfile->mask == 0x80 )
-      {
-  bfile->rack = getc( bfile->file );
-  if ( bfile->rack == EOF )
-            fatal_error( "Error in function ReadBits!\n" );
-      }
-      if ( bfile->rack & bfile->mask )
-         return_value |= mask;
-      mask >>= 1;
-      bfile->mask >>= 1;
-      if ( bfile->mask == 0 )
-  bfile->mask = 0x80;
-   }
-
-   return return_value;
-}
-
-/*-----------------------------------------------------------
    Далее начинается исходный текст собственно алгоритма LZW
 */
-
 /* Структура словаря для алгоритма LZW */
 
 struct dictionary
@@ -344,11 +210,12 @@ void CompressFile ( FILE *input, BFILE *output )
 
 uint find_dictionary_match ( int prefix_code, int character )
 {
-  amountTacts += FIND_DICTIONARY_MATCH_TACTS;
-   int index;
-   int offset;
 
+   int index, count_attempt = 0;
+   int offset;
+   clock_t start = clock();
    /* Собственно получение значения хеш-функции */
+
    index = ( character << ( BITS - 8 ) ) ^ prefix_code;
    /* Разрешение возможных коллизий */
    if ( index == 0 )
@@ -357,13 +224,18 @@ uint find_dictionary_match ( int prefix_code, int character )
       offset = TABLE_SIZE - index;
    for ( ; ; )
    {
+     count_attempt++;
       /* Эта ячейка словаря не использована */
-      if ( dict[index].code_value == UNUSED )
+      if ( dict[index].code_value == UNUSED ){
+         amountMcs += 0.001*count_attempt*FIND_DICTIONARY_MATCH_NS;
          return index;
+      }
       /* Найдено соответствие */
       if ( dict[index].prefix_code == prefix_code &&
-           dict[index].character == (char) character )
+           dict[index].character == (char) character ){
+         amountMcs += 0.001*count_attempt*FIND_DICTIONARY_MATCH_NS;
          return index;
+      }
       /* Коллизия. Подготовка к следующей попытке ее
          разрешения */
       index -= offset;
@@ -377,6 +249,7 @@ ulong call_compress( const char* infile_name, const char* outfile_name ) {
   BFILE *output;
   FILE *input;
 
+  amountMcs = 0;
   // открытие входного файла для чтения
   input = fopen( infile_name, "rb" );
   if ( input == NULL )
@@ -394,7 +267,7 @@ ulong call_compress( const char* infile_name, const char* outfile_name ) {
   fclose( input );
 
   // Вывод итогового значения тактов
-  return amountTacts;  
+  return amountMcs;  
 }
 
 struct Message {
@@ -461,13 +334,14 @@ int main(int argc, char** argv) {
     unsigned long a[100];
     
     //do{
-        for (int i=0; i<10000; i++){
-         // createMessage(count_measurement);
+        for (int i=0; i<10; i++){
+          createMessage(count_measurement);
              
           // Компрессия:
 				  setbuf( stdout, NULL );
-          a[0] = call_compress("data.dat", "out.dat");
-         // cout << count_measurement << " - " << i << endl;
+          a[i] = call_compress("data.dat", "out.dat");
+          cout << a[i] << endl;
+          //cout << count_measurement << " - " << i << endl;
         }
        /* float medium =0;
         for (int i=0; i<100; i++){
