@@ -8,6 +8,7 @@ int main()
 {
   cout << "Start!" << endl;
   ifstream file ("AirQualityUCIsed.csv");
+  ofstream data ("data.dat", ios::binary);
   if (!file){
     cout << "File with problem" << endl;
   } else {
@@ -41,6 +42,8 @@ int main()
 
     getline(file, cell); // The tail of the string
   }
+  data.write((char*)&co, sizeof(co));
+  data.close();
 
   return 0;
 }
