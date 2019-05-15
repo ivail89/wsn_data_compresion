@@ -270,93 +270,70 @@ ulong call_compress( const char* infile_name, const char* outfile_name ) {
   return amountMcs;  
 }
 
-struct Message {
-    short int ultrasonic_distance_sensor[5]; //пять ультразвуковых датчиков расстояния
-    short int infrared_distance_sensor[4]; //четыре инфракрасных датчика расстояния
-    float accelerometer[3]; //три оси акселерометра
-    short int gyroscope[4][3]; //четыре гироскопа
-};
-
-void createMessage(int count_measurement) {
-    Message m1;
-    const char *FName="data.dat"; 
-    ofstream fout(FName, ios::binary | ios::out);
-    if (count_measurement == 0) count_measurement = 1;
-
-    for (int i=0; i<count_measurement; i++){
-        // Значения измерений от 15 до 645 см
-        m1.ultrasonic_distance_sensor[0] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[1] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[2] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[3] = 15 + rand()%630; 
-        m1.ultrasonic_distance_sensor[4] = 15 + rand()%630; 
-        
-        // значения от 10 до 80 см
-        m1.infrared_distance_sensor[0] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[1] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[2] = 10 + rand()%70; 
-        m1.infrared_distance_sensor[3] = 10 + rand()%70; 
-        
-        // значения от -11g до 11g
-        m1.accelerometer[0] = -11 + rand()%22; 
-        m1.accelerometer[1] = -11 + rand()%22; 
-        m1.accelerometer[2] = -11 + rand()%22; 
-        
-        // значения от -2000 до 2000 °/сек
-        m1.gyroscope[0][0] = -2000 + rand()%4000; 
-        m1.gyroscope[0][1] = -2000 + rand()%4000; 
-        m1.gyroscope[0][2] = -2000 + rand()%4000; 
-        m1.gyroscope[1][0] = -2000 + rand()%4000; 
-        m1.gyroscope[1][1] = -2000 + rand()%4000; 
-        m1.gyroscope[1][2] = -2000 + rand()%4000; 
-        m1.gyroscope[2][0] = -2000 + rand()%4000; 
-        m1.gyroscope[2][1] = -2000 + rand()%4000; 
-        m1.gyroscope[2][2] = -2000 + rand()%4000; 
-        m1.gyroscope[3][0] = -2000 + rand()%4000; 
-        m1.gyroscope[3][1] = -2000 + rand()%4000; 
-        m1.gyroscope[3][2] = -2000 + rand()%4000; 
-        
-        fout.write((char*)&m1, sizeof(m1));
-    }
-    fout.close(); // закрываем файл    
-};
-
 ifstream::pos_type filesize(const char* filename)
 {
     ifstream in(filename, ifstream::ate | ifstream::binary);
     return in.tellg(); 
 }
 
+// Измерения записываем в структуру
+struct Row {
+  string date, time;
+  float co, c6h6, t, rh, ah;
+  int pts1, nmhc,pts2, no, pts3, no2, pts4, o3;
+};
+
 int main(int argc, char** argv) {
 
-    ofstream fRes("data.xls", ios::out);
-    unsigned int count_measurement = 30;
-    unsigned long a[100];
-    
-    //do{
-        for (int i=0; i<10; i++){
-          createMessage(count_measurement);
-             
-          // Компрессия:
-				  setbuf( stdout, NULL );
-          a[i] = call_compress("data.dat", "out.dat");
-          cout << a[i] << endl;
-          //cout << count_measurement << " - " << i << endl;
-        }
-       /* float medium =0;
-        for (int i=0; i<100; i++){
-            medium += a[i];
-        }
-        medium = medium / 100;*/
-        
-        //средний размер файла после сжатия (после 100 итереаций)
-        //fRes << count_measurement << "\t" << filesize("data.dat") << "\t"
-        //      << medium << endl;
-        
-       // count_measurement += 30;
-   // } while (count_measurement < 600);
-    
-    fRes.close();
-    return 0;
+  ifstream file ("AirQualityUCIsed.csv"); // Входные данные
+  ofstream data ("data.dat", ios::binary); // Файл который будем сжимать
+
+  if (!file){
+    cout << "File with problem" << endl;
+  } else {
+
+	  string header, cell; 
+	  Row r;
+	  int nRow = 1; // Сколько строк будет записано в один пакет на сжатие
+
+	  getline(file, header); // Заголовок забираем один раз до начала получения данных одной строкой, при необходимости сможем распарсить
+	  
+	  
+    int index = 0;
+    while (!file.eof()) {
+      for (int i=0; i<nRow; i++){
+
+        // Тестовые данные не требуют обработки
+        getline(file, r.date, ';');
+        getline(file, r.time, ';');
+
+        // Числовые измерения нужно переводить из строки в число
+        // Числа с плавающей точкой на вход должны идти только с точкой, запятую atof не переваривает
+        getline(file, cell, ';'); r.co = atof(cell.c_str());
+        getline(file, cell, ';'); r.pts1 = atof(cell.c_str());
+        getline(file, cell, ';'); r.nmhc = atof(cell.c_str());
+        getline(file, cell, ';'); r.c6h6 = atof(cell.c_str());
+        getline(file, cell, ';'); r.pts2 = atof(cell.c_str());
+        getline(file, cell, ';'); r.no = atof(cell.c_str());
+        getline(file, cell, ';'); r.pts3 = atof(cell.c_str());
+        getline(file, cell, ';'); r.no2 = atof(cell.c_str());
+        getline(file, cell, ';'); r.pts4 = atof(cell.c_str());
+        getline(file, cell, ';'); r.o3 = atof(cell.c_str());
+        getline(file, cell, ';'); r.t = atof(cell.c_str());
+        getline(file, cell, ';'); r.rh = atof(cell.c_str());
+        getline(file, cell, ';'); r.ah = atof(cell.c_str());
+
+        getline(file, cell); // The tail of the string
+        data.write((char*)&r, sizeof(r)); // Т.к. файл должен быть бинарным
+      }
+	  
+      setbuf( stdout, NULL );
+      cout << index  << ";" << call_compress("data.dat", "out.dat") << ";" << filesize("data.dat") << ";" << filesize("out.dat") << endl;
+      index++;
+    }
+
+	  data.close();
+  }
+  return 0;
 }
 
