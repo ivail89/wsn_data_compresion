@@ -286,7 +286,7 @@ struct Row {
 int main(int argc, char** argv) {
 
   ifstream file ("AirQualityUCIsed.csv"); // Входные данные
-  ofstream data ("data.dat", ios::binary); // Файл который будем сжимать
+  ofstream file_out("out_1.xls");
 
   if (!file){
     cout << "File with problem" << endl;
@@ -301,6 +301,8 @@ int main(int argc, char** argv) {
 	  
     int index = 0;
     while (!file.eof()) {
+    //while (index < 10){
+      ofstream data ("data.dat", ios::binary); // Файл который будем сжимать
       for (int i=0; i<nRow; i++){
 
         // Тестовые данные не требуют обработки
@@ -326,13 +328,16 @@ int main(int argc, char** argv) {
         getline(file, cell); // The tail of the string
         data.write((char*)&r, sizeof(r)); // Т.к. файл должен быть бинарным
       }
+	    data.close();
 	  
+      ulong compress_time = call_compress("data.dat", "out.dat"); 
       setbuf( stdout, NULL );
-      cout << index  << ";" << call_compress("data.dat", "out.dat") << ";" << filesize("data.dat") << ";" << filesize("out.dat") << endl;
+      file_out << r.date << ";" << compress_time << ";" << filesize("data.dat") << ";" << filesize("out.dat") << endl;
+      cout << r.date << endl;
       index++;
+
     }
 
-	  data.close();
   }
   return 0;
 }
